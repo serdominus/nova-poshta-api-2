@@ -293,14 +293,14 @@ class NovaPoshtaApi2 {
 	
 	/**
 	 * Get tracking information by track number
-	 * 
+	 * Change function documentsTracking new 
 	 * @param string $track Track number
+	 * @param string $phone Phone number
 	 * @return mixed
 	 */
-	function documentsTracking($track) {
-		return $this->request('InternetDocument', 'documentsTracking', array('Documents' => array('item' => $track)));
-	}
-	
+	function documentsTracking($track, $phone) {
+		return $this->request('TrackingDocument', 'getStatusDocuments', array('Documents' => array(array('DocumentNumber' => $track, 'Phone' => $phone))));
+}	
 	/**
 	 * Get cities of company NovaPoshta
 	 * 
