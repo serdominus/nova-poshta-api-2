@@ -59,7 +59,7 @@ $np = new NovaPoshtaApi2(
 
 ## Получение информации о трек-номере
 ```php
-$result = $np->documentsTracking('59000000000000');
+$result = $np->documentsTracking('59000000000000', '0670000000');
 ```
 
 ## Получение сроков доставки
