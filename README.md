@@ -13,26 +13,26 @@
 ### Git
 Необходимо выполнить в командной строке
 ```git
-git clone https://github.com/lis-dev/nova-poshta-api-2
+git clone https://github.com/serdominus/nova-poshta-api-2
 ```
 ### Composer
 Необходимо создать файл ``composer.json`` со следующим содержанием  
 ```json
 {
     "require": {
-        "lis-dev/nova-poshta-api-2": "dev-master"
+        "serdominus/nova-poshta-api-2": "dev-master"
     }
 }
 ```
 и запустить из командной строки команду ``php composer.phar install`` или ``php composer.phar update``
 Или выполнить в командной строке 
 ```
-composer require lis-dev/nova-poshta-api-2:dev-master
+composer require serdominus/nova-poshta-api-2:dev-master
 ```
 ### Альтернативная установка
 Необходимо скачать архив по ссылке
 ```
-https://github.com/lis-dev/nova-poshta-api-2/archive/master.zip
+https://github.com/serdominus/nova-poshta-api-2/archive/master.zip
 ```
 # Форматы данных
 Для входящих данных используются PHP массивы, ответ сервера может быть получен в формате:
