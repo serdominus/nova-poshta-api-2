@@ -10,6 +10,8 @@
 После получения ключа API предоставляется возможность использовать все методы класса [официальной из документации](https://my.novaposhta.ua/data/API2-200215-1622-28.pdf)
 
 ## Установка последней версии класса для работы с API
+
+Потрібен PHP 8.2 або новіший із розширеннями mbstring і SimpleXML. Для стандартного транспорту потрібне розширення cURL. Для PHP без cURL є транспорт `file_get_contents`.
 ### Git
 Необходимо выполнить в командной строке
 ```git
@@ -43,6 +45,10 @@ https://github.com/serdominus/nova-poshta-api-2/archive/master.zip
 # Использование 
 ## Создание экземпляра класса
 ```php
+use LisDev\Delivery\NovaPoshtaApi2;
+
+require __DIR__ . '/vendor/autoload.php';
+
 $np = new NovaPoshtaApi2('Ваш_ключ_API_2.0');
 ```
 
@@ -53,7 +59,7 @@ $np = new NovaPoshtaApi2(
 	'Ваш_ключ_API_2.0',
 	'ru', // Язык возвращаемых данных: ru (default) | ua | en
 	FALSE, // При ошибке в запросе выбрасывать Exception: FALSE (default) | TRUE
-	'curl' // Используемый механизм запроса: curl (defalut) | file_get_content
+	'curl' // Транспорт: curl або file_get_contents
 );
 ```
 
@@ -61,6 +67,28 @@ $np = new NovaPoshtaApi2(
 ```php
 $result = $np->documentsTracking('59000000000000', '0670000000');
 ```
+
+## Сповіщення про посилку
+
+```php
+$result = $np->documentsTrackingWithNotification(
+    $trackingNumber,
+    $phone,
+    storageEndsAt: $confirmedStorageEndsAt,
+    recipientLabel: 'Петренко О.',
+);
+$notification = $result['data'][0]['notification'] ?? null;
+```
+
+Приклад використовує стандартний формат `array`. Метод також підтримує `setFormat('json')` і `setFormat('xml')`. Звичайний `documentsTracking()` повертає дані трекінгу без доданого поля.
+
+- `awaiting_pickup` — посилка чекає на отримувача у відділенні або поштоматі. У тексті показуються останні чотири цифри ТТН. Підпис отримувача можна пропустити.
+- `storage_ending` — до підтвердженого завершення зберігання лишилося від 0 до 3 календарних днів за київським часом. Відповідь містить `storageEndsAt` у форматі ISO 8601 та `daysRemaining`.
+- `null` — для цього статусу або після переданого строку нагадування немає. У XML це порожній елемент `<notification/>`.
+
+Передавайте `storageEndsAt` як `DateTimeImmutable` із підтвердженим часом завершення зберігання для цієї ТТН. Коли такої дати немає, пропустіть параметр. Строк залежить від умов послуги. Метод формує дані для інтеграції, яка вирішує, коли показувати сповіщення.
+
+Для невдалого HTTP-запиту або некоректної відповіді клієнт повертає `success: false` та `errors` у вибраному форматі. Якщо в конструкторі ввімкнено `throwErrors`, клієнт кидає виняток.
 
 ## Получение сроков доставки
 ```php
@@ -242,3 +270,8 @@ $result = $np
 * getTraysList
 * getTypesOfPayers
 * getTypesOfPayersForRedelivery
+
+
+## Перевірка
+
+Після `composer install` запустіть `composer test`. Регресійні тести використовують локальні відповіді API й працюють без ключа. Файл `tests/NovaPoshtaApi2Test.php` містить історичні інтеграційні тести PHPUnit 4, деякі з них змінюють дані в обліковому записі.
