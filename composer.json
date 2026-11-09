@@ -1,6 +1,6 @@
 {
     "name": "serdominus/nova-poshta-api-2",
-    "description": "PHP class for API 2.0 ukrainian delivery company \"Nova Poshta\"",
+    "description": "PHP-клієнт для роботи з API 2.0 Нової пошти",
     "keywords": ["delivery", "delivery service", "nova poshta", "nova poshta api"],
     "homepage": "https://github.com/serdominus/nova-poshta-api-2",
     "license": "MIT",
@@ -22,7 +22,7 @@
         "ext-simplexml": "*"
     },
     "suggest": {
-        "ext-curl": "Required for the default cURL transport"
+        "ext-curl": "Потрібне для стандартного транспорту cURL"
     },
     "autoload": {
         "psr-4": {
