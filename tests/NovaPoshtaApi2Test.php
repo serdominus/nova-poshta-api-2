@@ -1,6 +1,6 @@
 <?php
-namespace LisDev\Tests;
-use LisDev\Delivery\NovaPoshtaApi2;
+namespace Serdominus\Tests;
+use Serdominus\Delivery\NovaPoshtaApi2;
 /**
  * phpUnit test class
  * 
@@ -39,7 +39,7 @@ class NovaPoshtaApi2Test extends \PHPUnit_Framework_TestCase
 	 */
 	function testSetConnectionType() {
 		$result = $this->np->setConnectionType('file_get_contents');
-		$this->assertInstanceOf('LisDev\Delivery\NovaPoshtaApi2', $result);
+		$this->assertInstanceOf('Serdominus\Delivery\NovaPoshtaApi2', $result);
 	}
 
 	/**
