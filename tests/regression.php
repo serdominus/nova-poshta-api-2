@@ -72,6 +72,21 @@ expect(true, str_contains($notice['message'], 'Петренко О.'));
 $sent = json_decode($np->requests[1][1], true, 512, JSON_THROW_ON_ERROR);
 expect('0670000000', $sent['methodProperties']['Documents'][0]['Phone']);
 
+$batch = new TestClient('test-key', 'ua');
+$batch->replies = [success([
+    ['Number' => '20450000000001'],
+    ['Number' => '20450000000002'],
+])];
+$batch->getStatusDocuments([
+    ['ttn' => '20450000000001', 'phone' => '0670000000'],
+    ['DocumentNumber' => '20450000000002'],
+]);
+$sent = json_decode($batch->requests[0][1], true, 512, JSON_THROW_ON_ERROR);
+expect([
+    ['DocumentNumber' => '20450000000001', 'Phone' => '0670000000'],
+    ['DocumentNumber' => '20450000000002'],
+], $sent['methodProperties']['Documents']);
+
 $kyiv = new DateTimeZone('Europe/Kyiv');
 $deadline = new DateTimeImmutable('+3 days', $kyiv);
 $locker = success([['Number' => $number, 'StatusCode' => 8]]);

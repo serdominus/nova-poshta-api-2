@@ -381,6 +381,27 @@ class NovaPoshtaApi2 {
 	}
 
 	/**
+	 * Get tracking information for multiple shipments in one request.
+	 */
+	function getStatusDocuments(array $shipments) {
+		$documents = array();
+		foreach ($shipments as $shipment) {
+			$documentNumber = (string) ($shipment['ttn'] ?? $shipment['DocumentNumber'] ?? '');
+			if ($documentNumber === '') {
+				continue;
+			}
+			$document = array('DocumentNumber' => $documentNumber);
+			$phone = (string) ($shipment['phone'] ?? $shipment['Phone'] ?? '');
+			if ($phone !== '') {
+				$document['Phone'] = $phone;
+			}
+			$documents[] = $document;
+		}
+
+		return $this->request('TrackingDocument', 'getStatusDocuments', array('Documents' => $documents));
+	}
+
+	/**
 	 * Track one shipment and add a Ukrainian pickup notice to each returned tracking record.
 	 *
 	 * Pass a confirmed storage cutoff for this shipment to enable the expiration notice.
