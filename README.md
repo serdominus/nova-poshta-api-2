@@ -54,12 +54,14 @@ composer require serdominus/nova-poshta-api-2:dev-master
 ## Створення клієнта
 
 ```php
-use LisDev\Delivery\NovaPoshtaApi2;
+use Serdominus\Delivery\NovaPoshtaApi2;
 
 require __DIR__ . '/vendor/autoload.php';
 
 $np = new NovaPoshtaApi2('Ваш_ключ_API');
 ```
+
+У нових інтеграціях використовуйте простір імен `Serdominus\Delivery`. Імпорт `LisDev\Delivery\NovaPoshtaApi2` залишається доступним для наявних інтеграцій.
 
 ## Налаштування клієнта
 

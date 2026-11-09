@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use LisDev\Delivery\NovaPoshtaApi2;
+use Serdominus\Delivery\NovaPoshtaApi2;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -12,6 +12,9 @@ set_error_handler(static function (int $level, string $message, string $file, in
     }
     return false;
 });
+
+$legacyClient = new LisDev\Delivery\NovaPoshtaApi2('test-key', 'ua');
+expect(NovaPoshtaApi2::class, get_class($legacyClient));
 
 final class TestClient extends NovaPoshtaApi2
 {

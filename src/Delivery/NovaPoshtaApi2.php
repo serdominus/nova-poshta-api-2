@@ -1,5 +1,5 @@
 <?php
-namespace LisDev\Delivery;
+namespace Serdominus\Delivery;
 /**
  * Nova Poshta API Class
  * 
@@ -1091,4 +1091,9 @@ class NovaPoshtaApi2 {
 		// If needs data
 		return $this->request('InternetDocument', 'printMarkings', array('DocumentRefs' => $documentRefs, 'Type' => $type));
 	}
+}
+
+// Preserve the old class name for projects that include this file directly.
+if (!class_exists('LisDev\Delivery\NovaPoshtaApi2', false)) {
+	class_alias(NovaPoshtaApi2::class, 'LisDev\Delivery\NovaPoshtaApi2');
 }
