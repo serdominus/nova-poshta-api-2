@@ -5,7 +5,7 @@ namespace LisDev\Delivery;
  * 
  * @author lis-dev
  * @see https://my.novaposhta.ua/data/API2-200215-1622-28.pdf
- * @see https://github.com/lis-dev
+ * @see https://github.com/serdominus/nova-poshta-api-2
  * @license MIT
  */
 class NovaPoshtaApi2 {
