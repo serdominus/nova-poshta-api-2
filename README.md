@@ -1,22 +1,33 @@
 # Nova Poshta API 2.0
-Класс предоставляет доступ к функциям API 2.0 службы доставки Новая Почта
 
-# Подготовка
-## Получение ключа API
-Для использования API необходимо: 
-* зарегистрироваться на сайте [Новой Почты](http://novaposhta.ua)
-* На [странице настроек](https://my.novaposhta.ua/settings/index#apikeys) в личном кабинете сгенерировать ключ для работы с API 
+PHP-клієнт для роботи з API 2.0 Нової пошти.
 
-После получения ключа API предоставляется возможность использовать все методы класса [официальной из документации](https://my.novaposhta.ua/data/API2-200215-1622-28.pdf)
+# Підготовка
 
-## Установка последней версии класса для работы с API
+## Отримання ключа API
+
+Щоб отримати доступ до API, виконайте два кроки.
+
+1. Зареєструйтеся на сайті [Нової пошти](https://novaposhta.ua).
+2. Згенеруйте ключ API на [сторінці налаштувань](https://new.novaposhta.ua/dashboard/settings/developers) особистого кабінету.
+
+Використовуйте цей ключ для запитів до API. Опис методів наведено в [документації Нової пошти](https://my.novaposhta.ua/data/API2-200215-1622-28.pdf).
+
+## Встановлення
+
+Потрібен PHP 8.2 або новіший із розширеннями mbstring і SimpleXML. Для стандартного транспорту потрібне розширення cURL. Для PHP без cURL є транспорт `file_get_contents`.
+
 ### Git
-Необходимо выполнить в командной строке
+
+Клонуйте репозиторій.
+
 ```git
 git clone https://github.com/serdominus/nova-poshta-api-2
 ```
+
 ### Composer
-Необходимо создать файл ``composer.json`` со следующим содержанием  
+
+Додайте пакет до розділу `require` у файлі `composer.json`.
 ```json
 {
     "require": {
@@ -24,170 +35,206 @@ git clone https://github.com/serdominus/nova-poshta-api-2
     }
 }
 ```
-и запустить из командной строки команду ``php composer.phar install`` или ``php composer.phar update``
-Или выполнить в командной строке 
+Після цього запустіть `composer install` або `composer update`.
+Пакет також можна додати однією командою.
 ```
 composer require serdominus/nova-poshta-api-2:dev-master
 ```
-### Альтернативная установка
-Необходимо скачать архив по ссылке
-```
-https://github.com/serdominus/nova-poshta-api-2/archive/master.zip
-```
-# Форматы данных
-Для входящих данных используются PHP массивы, ответ сервера может быть получен в формате:
-* как PHP массив
-* JSON
-* XML
 
-# Использование 
-## Создание экземпляра класса
+### ZIP-архів
+
+[Завантажте архів репозиторію](https://github.com/serdominus/nova-poshta-api-2/archive/master.zip).
+
+# Формати даних
+
+Передавайте параметри запитів у PHP-масивах. Клієнт повертає відповідь як PHP-масив, JSON або XML.
+
+# Використання
+
+## Створення клієнта
+
 ```php
-$np = new NovaPoshtaApi2('Ваш_ключ_API_2.0');
+use LisDev\Delivery\NovaPoshtaApi2;
+
+require __DIR__ . '/vendor/autoload.php';
+
+$np = new NovaPoshtaApi2('Ваш_ключ_API');
 ```
 
-## Создание экземпляра класса (с расширенными параметрами)
-Рекомендуется использовать, если необходимо получать данные на языке, отличном от русского, выбрасывать Exception при ошибке запроса, или при отсутствии установленной библиотеки curl на сервере
+## Налаштування клієнта
+
+У конструкторі можна задати мову відповіді, увімкнути винятки при помилках запиту та вибрати HTTP-транспорт.
 ```php
 $np = new NovaPoshtaApi2(
-	'Ваш_ключ_API_2.0',
-	'ru', // Язык возвращаемых данных: ru (default) | ua | en
-	FALSE, // При ошибке в запросе выбрасывать Exception: FALSE (default) | TRUE
-	'curl' // Используемый механизм запроса: curl (defalut) | file_get_content
+	'Ваш_ключ_API',
+	'ua', // Мова відповіді (ua, en або ru за замовчуванням)
+	FALSE, // Кидати виняток при помилці запиту (FALSE за замовчуванням)
+	'curl' // Транспорт (curl або file_get_contents)
 );
 ```
 
-## Получение информации о трек-номере
+## Відстеження посилки за номером ТТН
+
 ```php
 $result = $np->documentsTracking('59000000000000', '0670000000');
 ```
 
-## Получение сроков доставки
+## Сповіщення про посилку
+
 ```php
-// Получение кода города по названию города и области
-$sender_city = $np->getCity('Белгород-Днестровский', 'Одесская');
-$sender_city_ref = $sender_city['data'][0]['Ref'];
-// Получение кода города по названию города и области
-$recipient_city = $np->getCity('Киев', 'Киевская');
-$recipient_city_ref = $recipient_city['data'][0]['Ref'];
-// Дата отправки груза
-$date = date('d.m.Y');
-// Получение ориентировочной даты прибытия груза между складами в разных городах
-$result = $np->getDocumentDeliveryDate($sender_city_ref, $recipient_city_ref, 'WarehouseWarehouse', $date);	
+$result = $np->documentsTrackingWithNotification(
+    $trackingNumber,
+    $phone,
+    storageEndsAt: $confirmedStorageEndsAt,
+    recipientLabel: 'Петренко О.',
+);
+$notification = $result['data'][0]['notification'] ?? null;
 ```
-## Получение стоимости доставки
+
+Приклад використовує стандартний формат `array`. Метод також підтримує `setFormat('json')` і `setFormat('xml')`. Звичайний `documentsTracking()` повертає дані трекінгу без доданого поля.
+
+- `awaiting_pickup` — посилка чекає на отримувача у відділенні або поштоматі. У тексті показуються останні чотири цифри ТТН. Підпис отримувача можна пропустити.
+- `storage_ending` — до підтвердженого завершення зберігання лишилося від 0 до 3 календарних днів за київським часом. Відповідь містить `storageEndsAt` у форматі ISO 8601 та `daysRemaining`.
+- `null` — для цього статусу або після переданого строку нагадування немає. У XML це порожній елемент `<notification/>`.
+
+Передавайте `storageEndsAt` як `DateTimeImmutable` із підтвердженим часом завершення зберігання для цієї ТТН. Коли такої дати немає, пропустіть параметр. Строк залежить від умов послуги. Метод формує дані для інтеграції, яка вирішує, коли показувати сповіщення.
+
+Для невдалого HTTP-запиту або некоректної відповіді клієнт повертає `success: false` та `errors` у вибраному форматі. Якщо в конструкторі ввімкнено `throwErrors`, клієнт кидає виняток.
+
+## Орієнтовна дата доставки
+
 ```php
-// Получение кода города по названию города и области
-$sender_city = $np->getCity('Белгород-Днестровский', 'Одесская');
+// Отримуємо ідентифікатор міста за назвою та областю
+$sender_city = $np->getCity('Білгород-Дністровський', 'Одеська');
 $sender_city_ref = $sender_city['data'][0]['Ref'];
-// Получение кода города по названию города и области
-$recipient_city = $np->getCity('Киев', 'Киевская');
+// Отримуємо ідентифікатор міста за назвою та областю
+$recipient_city = $np->getCity('Київ', 'Київська');
 $recipient_city_ref = $recipient_city['data'][0]['Ref'];
-// Вес товара
+// Дата відправлення
+$date = date('d.m.Y');
+// Розраховуємо орієнтовну дату доставки між відділеннями
+$result = $np->getDocumentDeliveryDate($sender_city_ref, $recipient_city_ref, 'WarehouseWarehouse', $date);
+```
+
+## Вартість доставки
+
+```php
+// Отримуємо ідентифікатор міста за назвою та областю
+$sender_city = $np->getCity('Білгород-Дністровський', 'Одеська');
+$sender_city_ref = $sender_city['data'][0]['Ref'];
+// Отримуємо ідентифікатор міста за назвою та областю
+$recipient_city = $np->getCity('Київ', 'Київська');
+$recipient_city_ref = $recipient_city['data'][0]['Ref'];
+// Вага вантажу
 $weight = 7;
-// Цена в грн
+// Оголошена вартість у гривнях
 $price = 5450;
-// Получение стоимости доставки груза с указанным весом и стоимостью между складами в разных городах 
+// Розраховуємо вартість доставки між відділеннями
 $result = $np->getDocumentPrice($sender_city_ref, $recipient_city_ref, 'WarehouseWarehouse', $weight, $price);
 ```
-## Генерирование новой электронной накладной
+
+## Створення експрес-накладної
+
 ```php
-// Перед генерированием ЭН необходимо получить данные отправителя
-// Получение всех отправителей
+// Отримуємо список відправників
 $senderInfo = $np->getCounterparties('Sender', 1, '', '');
-// Выбор отправителя в конкретном городе (в данном случае - в первом попавшемся)
+// Для прикладу беремо першого відправника зі списку
 $sender = $senderInfo['data'][0];
-// Информация о складе отправителя
+// Отримуємо список відділень у місті відправника
 $senderWarehouses = $np->getWarehouses($sender['City']);
-// Генерирование новой накладной
+// Створюємо експрес-накладну
 $result = $np->newInternetDocument(
-    // Данные отправителя
+    // Дані відправника
     array(
-        // Данные пользователя
         'FirstName' => $sender['FirstName'],
         'MiddleName' => $sender['MiddleName'],
         'LastName' => $sender['LastName'],
-        // Вместо FirstName, MiddleName, LastName можно ввести зарегистрированные ФИО отправителя или название фирмы для юрлиц
-        // (можно получить, вызвав метод getCounterparties('Sender', 1, '', ''))
+        // Замість FirstName, MiddleName і LastName можна вказати зареєстроване ПІБ відправника або назву компанії
+        // Поле Description є у відповіді getCounterparties('Sender', 1, '', '')
         // 'Description' => $sender['Description'],
-        // Необязательное поле, в случае отсутствия будет использоваться из данных контакта
+        // Якщо пропустити Phone, клієнт використає номер контактної особи
         // 'Phone' => '0631112233',
-        // Город отправления
-        // 'City' => 'Белгород-Днестровский',
-        // Область отправления
-        // 'Region' => 'Одесская',
+        // Місто відправлення
+        // 'City' => 'Білгород-Дністровський',
+        // Область відправлення
+        // 'Region' => 'Одеська',
         'CitySender' => $sender['City'],
-        // Отделение отправления по ID (в данном случае - в первом попавшемся)
+        // Ідентифікатор відділення відправлення (для прикладу беремо перше у списку)
         'SenderAddress' => $senderWarehouses['data'][0]['Ref'],
-        // Отделение отправления по адресу
-        // 'Warehouse' => $senderWarehouses['data'][0]['DescriptionRu'],
+        // Відділення відправлення за описом
+        // 'Warehouse' => $senderWarehouses['data'][0]['Description'],
     ),
-    // Данные получателя
+    // Дані отримувача
     array(
-        'FirstName' => 'Сидор',
+        'FirstName' => 'Сидір',
         'MiddleName' => 'Сидорович',
-        'LastName' => 'Сиродов',
+        'LastName' => 'Сидоренко',
         'Phone' => '0509998877',
-        'City' => 'Киев',
-        'Region' => 'Киевская',
-        'Warehouse' => 'Отделение №3: ул. Калачевская, 13 (Старая Дарница)',
+        'City' => 'Київ',
+        'Region' => 'Київська',
+        'Warehouse' => 'Відділення №3',
     ),
     array(
-        // Дата отправления
+        // Дата відправлення
         'DateTime' => date('d.m.Y'),
-        // Тип доставки, дополнительно - getServiceTypes()
+        // Тип доставки можна вибрати з getServiceTypes()
         'ServiceType' => 'WarehouseWarehouse',
-        // Тип оплаты, дополнительно - getPaymentForms()
+        // Форму оплати можна вибрати з getPaymentForms()
         'PaymentMethod' => 'Cash',
-        // Кто оплачивает за доставку
+        // Платник за доставку
         'PayerType' => 'Recipient',
-        // Стоимость груза в грн
+        // Оголошена вартість вантажу у гривнях
         'Cost' => '500',
-        // Кол-во мест
+        // Кількість місць
         'SeatsAmount' => '1',
-        // Описание груза
-        'Description' => 'Кастрюля',
-        // Тип доставки, дополнительно - getCargoTypes
+        // Опис вантажу
+        'Description' => 'Каструля',
+        // Тип вантажу можна вибрати з getCargoTypes()
         'CargoType' => 'Cargo',
-        // Вес груза
+        // Вага вантажу
         'Weight' => '10',
-        // Объем груза в куб.м.
+        // Об’єм вантажу в кубічних метрах
         'VolumeGeneral' => '0.5',
-        // Обратная доставка
+        // Зворотна доставка
         'BackwardDeliveryData' => array(
             array(
-                // Кто оплачивает обратную доставку
+                // Платник за зворотну доставку
                 'PayerType' => 'Recipient',
-                // Тип доставки
+                // Тип зворотної доставки
                 'CargoType' => 'Money',
-                // Значение обратной доставки
+                // Сума зворотної доставки
                 'RedeliveryString' => 4552,
             )
         )
     )
 );
 ```
-## Получение складов в определенном городе
+
+## Відділення в місті
+
 ```php
-// В параметрах указывается город и область (для более точного поиска)
-$city = $np->getCity('Киев', 'Киевская');
-$result = $np->getWarehouses($city);
+// Для точнішого пошуку вкажіть місто й область
+$city = $np->getCity('Київ', 'Київська');
+$result = $np->getWarehouses($city['data'][0]['Ref']);
 ```
-## Вызов произвольного метода
+
+## Виклик довільного методу
+
 ```php
 $result = $np
-	->model('Имя_модели')
-	->method('Имя_метода')
+	->model('Назва_моделі')
+	->method('Назва_методу')
 	->params(array(
-		'Имя_параметра_1' => 'Значение_параметра_1',
-		'Имя_параметра_2' => 'Значение_параметра_2',
+		'Назва_параметра_1' => 'Значення_параметра_1',
+		'Назва_параметра_2' => 'Значення_параметра_2',
 	))
 	->execute();
 ```
 
-# Реализованные методы для работы с моделями
+# Підтримувані методи за моделями
 
 ## Модель InternetDocument
+
 * save
 * update
 * delete
@@ -197,11 +244,16 @@ $result = $np
 * getDocument
 * printDocument
 * printMarkings
-* documentsTracking
 * newInternetDocument
 * generateReport
 
+## Модель TrackingDocument
+
+* documentsTracking
+* documentsTrackingWithNotification
+
 ## Модель Counterparty
+
 * save
 * update
 * delete
@@ -213,11 +265,13 @@ $result = $np
 * getCounterpartyOptions
 
 ## Модель ContactPerson
+
 * save
 * update
 * delete
 
 ## Модель Address
+
 * save
 * update
 * delete
@@ -228,6 +282,7 @@ $result = $np
 * findNearestWarehouse
 
 ## Модель Common
+
 * getTypesOfCounterparties
 * getBackwardDeliveryCargoTypes
 * getCargoDescriptionList
@@ -242,3 +297,8 @@ $result = $np
 * getTraysList
 * getTypesOfPayers
 * getTypesOfPayersForRedelivery
+
+
+## Перевірка
+
+Після `composer install` запустіть `composer test`. Регресійні тести використовують локальні відповіді API й працюють без ключа. Файл `tests/NovaPoshtaApi2Test.php` містить історичні інтеграційні тести PHPUnit 4, деякі з них змінюють дані в обліковому записі.

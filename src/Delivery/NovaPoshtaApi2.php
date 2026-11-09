@@ -5,7 +5,7 @@ namespace LisDev\Delivery;
  * 
  * @author lis-dev
  * @see https://my.novaposhta.ua/data/API2-200215-1622-28.pdf
- * @see https://github.com/lis-dev
+ * @see https://github.com/serdominus/nova-poshta-api-2
  * @license MIT
  */
 class NovaPoshtaApi2 {
@@ -13,7 +13,7 @@ class NovaPoshtaApi2 {
 	 * Key for API NovaPoshta
 	 * 
 	 * @var string $key
-	 * @see https://my.novaposhta.ua/settings/index#apikeys
+	 * @see https://new.novaposhta.ua/dashboard/settings/developers
 	 */
 	protected $key;
 	
@@ -68,7 +68,7 @@ class NovaPoshtaApi2 {
 	 */
 	function __construct($key, $language = 'ru', $throwErrors = FALSE, $connectionType = 'curl') {
 		$this->throwErrors = $throwErrors;
-		return $this	
+		$this
 			->setKey($key)
 			->setLanguage($language)
 			->setConnectionType($connectionType)
@@ -155,90 +155,164 @@ class NovaPoshtaApi2 {
 		return $this->format;
 	}
 	
-	/**
-	 * Prepare data before return it
-	 * 
-	 * @param json $data
-	 * @return mixed
-	 */
-	private function prepare($data) {
-		//Returns array
-		if ($this->format == 'array') {
-			$result = is_array($data)
-				? $data
-				: json_decode($data, 1);
-			// If error exists, throw Exception
-			if ($this->throwErrors AND $result['errors'])
-				throw new \Exception(is_array($result['errors']) ? implode("\n", $result['errors']) : $result['errors']);
-			return $result;
-		}
-		// Returns json or xml document
-		return $data;
+	private function prepare(array $response) {
+		$this->checkErrors($response['errors'] ?? array(), !empty($response['success']));
+		return match ($this->format) {
+			'json' => json_encode($response, JSON_THROW_ON_ERROR),
+			'xml' => $this->array2xml($response),
+			default => $response,
+		};
 	}
-	
-	/**
-	 * Converts array to xml
-	 * 
-	 * @param array 
-	 */
-	private function array2xml(array $array, $xml = false){
-		($xml === false) AND $xml = new \SimpleXMLElement('<root/>');
-		foreach($array as $key => $value){
-			if (is_array($value)){
-				$this->array2xml($value, $xml->addChild($key));
-			} else {
-				$xml->addChild($key, $value);
-			}
+
+	private function checkErrors($errors, bool $success): void {
+		if ($this->throwErrors && ($errors || !$success)) {
+			$messages = array_filter((array) $errors, 'is_scalar');
+			throw new \RuntimeException($messages ? implode("\n", $messages) : 'Nova Poshta rejected the request.');
 		}
+	}
+
+	private function response(array $data = array(), string $error = ''): array {
+		return array(
+			'success' => $error === '',
+			'data' => $data,
+			'errors' => $error === '' ? array() : array($error),
+			'warnings' => array(),
+			'info' => array(),
+		);
+	}
+
+	private function withArrayFormat(callable $operation): array {
+		$format = $this->format;
+		$this->format = 'array';
+		try {
+			return $operation();
+		} finally {
+			$this->format = $format;
+		}
+	}
+
+	private function array2xml(array $array): string {
+		$xml = new \SimpleXMLElement('<root/>');
+		$this->appendXml($xml, $array);
 		return $xml->asXML();
 	}
-	
-	/**
-	 * Make request to NovaPoshta API
-	 * 
-	 * @param string $model Model name
-	 * @param string $method Method name
-	 * @param array $params Required params
-	 */
+
+	private function appendXml(\SimpleXMLElement $xml, array $array): void {
+		foreach ($array as $key => $value) {
+			$name = is_int($key) ? 'item' : $key;
+			if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_.-]*$/D', $name)) {
+				throw new \InvalidArgumentException('Invalid XML element name in Nova Poshta request.');
+			}
+			if (is_array($value)) {
+				$this->appendXml($xml->addChild($name), $value);
+			} else {
+				$text = is_bool($value) ? ($value ? 'true' : 'false') : (string) $value;
+				$xml->addChild($name, htmlspecialchars($text, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE | ENT_DISALLOWED, 'UTF-8'));
+			}
+		}
+	}
+
 	private function request($model, $method, $params = NULL) {
-		// Get required URL
-		$url = $this->format == 'xml'
-			? 'https://api.novaposhta.ua/v2.0/xml/'
-			: 'https://api.novaposhta.ua/v2.0/json/';
-		
+		$xml = $this->format === 'xml';
+		$url = $xml ? 'https://api.novaposhta.ua/v2.0/xml/' : 'https://api.novaposhta.ua/v2.0/json/';
 		$data = array(
 			'apiKey' => $this->key,
 			'modelName' => $model,
 			'calledMethod' => $method,
 			'language' => $this->language,
-			'methodProperties' => $params
+			'methodProperties' => $params,
 		);
-		// Convert data to neccessary format
-		$post = $this->format == 'xml'
-			? $this->array2xml($data)
-			: $post = json_encode($data);
-			
-		if ($this->getConnectionType() == 'curl') {
-		    $ch = curl_init($url);
-		    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-		    curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: '.($this->format == 'xml' ? 'text/xml' : 'application/json')));
-		    curl_setopt($ch, CURLOPT_HEADER, 0);
-		    curl_setopt($ch, CURLOPT_POST, 1);
-		    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
-		    curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
-		    $result = curl_exec($ch);
-		    curl_close($ch);
-		} else {
-    		$result = file_get_contents($url, null, stream_context_create(array(
-    		    'http' => array(
-    		        'method' => 'POST',
-    		        'header' => "Content-type: application/x-www-form-urlencoded;\r\n",
-    		        'content' => $post,
-    		    ),
-    		)));
+
+		try {
+			$post = $xml ? $this->array2xml($data) : json_encode($data, JSON_THROW_ON_ERROR);
+			$body = $this->sendRequest($url, $post, $xml ? 'text/xml' : 'application/json');
+		} catch (\JsonException | \InvalidArgumentException) {
+			return $this->prepare($this->response(error: 'Unable to encode Nova Poshta request.'));
+		} catch (\RuntimeException $e) {
+			return $this->prepare($this->response(error: $e->getMessage()));
 		}
-		
-		return $this->prepare($result);
+
+		if ($xml) {
+			$result = @simplexml_load_string($body, \SimpleXMLElement::class, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
+			if ($result === false || !isset($result->success)) {
+				return $this->prepare($this->response(error: 'Invalid XML response from Nova Poshta.'));
+			}
+			$errors = array();
+			if (isset($result->errors)) {
+				foreach ($result->errors->item as $error) {
+					$errors[] = (string) $error;
+				}
+			}
+			$this->checkErrors($errors, in_array((string) $result->success, array('true', '1'), true));
+			return $body;
+		}
+
+		$result = json_decode($body, true);
+		if (!is_array($result) || !isset($result['success'])) {
+			return $this->prepare($this->response(error: 'Invalid JSON response from Nova Poshta.'));
+		}
+		$this->checkErrors($result['errors'] ?? array(), !empty($result['success']));
+		return $this->format === 'json' ? $body : $result;
+	}
+
+	protected function sendRequest(string $url, string $post, string $contentType): string {
+		if ($this->getConnectionType() === 'curl') {
+			if (!function_exists('curl_init')) {
+				throw new \RuntimeException('cURL is unavailable. Select the file_get_contents transport.');
+			}
+			$handle = curl_init($url);
+			if ($handle === false) {
+				throw new \RuntimeException('Unable to initialize Nova Poshta connection.');
+			}
+			curl_setopt_array($handle, array(
+				CURLOPT_RETURNTRANSFER => true,
+				CURLOPT_HTTPHEADER => array('Content-Type: ' . $contentType),
+				CURLOPT_POST => true,
+				CURLOPT_POSTFIELDS => $post,
+				CURLOPT_SSL_VERIFYPEER => true,
+				CURLOPT_SSL_VERIFYHOST => 2,
+				CURLOPT_CONNECTTIMEOUT => 5,
+				CURLOPT_TIMEOUT => 20,
+			));
+			$body = curl_exec($handle);
+			if ($body === false) {
+				throw new \RuntimeException('Nova Poshta connection failed: ' . curl_strerror(curl_errno($handle)));
+			}
+			$status = curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+		} else {
+			$context = stream_context_create(array('http' => array(
+				'method' => 'POST',
+				'header' => 'Content-Type: ' . $contentType,
+				'content' => $post,
+				'timeout' => 20,
+				'follow_location' => 0,
+				'ignore_errors' => true,
+			), 'ssl' => array(
+				'verify_peer' => true,
+				'verify_peer_name' => true,
+			)));
+			$stream = @fopen($url, 'rb', false, $context);
+			if ($stream === false) {
+				throw new \RuntimeException('Unable to connect to Nova Poshta.');
+			}
+			$headers = stream_get_meta_data($stream)['wrapper_data'];
+			$body = stream_get_contents($stream);
+			$timedOut = stream_get_meta_data($stream)['timed_out'];
+			fclose($stream);
+			if ($body === false || $timedOut) {
+				throw new \RuntimeException('Unable to read the Nova Poshta response.');
+			}
+			$status = 0;
+			foreach ($headers as $header) {
+				if (preg_match('/^HTTP\/\S+ (\d{3})\b/', $header, $matches)) {
+					$status = (int) $matches[1];
+				}
+			}
+		}
+		if ($status < 200 || $status >= 300) {
+			throw new \RuntimeException('Nova Poshta returned HTTP ' . $status . '.');
+		}
+		return $body;
 	}
 
 	/**
@@ -298,9 +372,76 @@ class NovaPoshtaApi2 {
 	 * @param string $phone Phone number
 	 * @return mixed
 	 */
-	function documentsTracking($track, $phone) {
-		return $this->request('TrackingDocument', 'getStatusDocuments', array('Documents' => array(array('DocumentNumber' => $track, 'Phone' => $phone))));
-}	
+	function documentsTracking($track, $phone = '') {
+		$document = array('DocumentNumber' => $track);
+		if ($phone !== '') {
+			$document['Phone'] = $phone;
+		}
+		return $this->request('TrackingDocument', 'getStatusDocuments', array('Documents' => array($document)));
+	}
+
+	/**
+	 * Track one shipment and add a Ukrainian pickup notice to each returned tracking record.
+	 *
+	 * Pass a confirmed storage cutoff for this shipment to enable the expiration notice.
+	 * The optional recipient label is display text supplied by the integration.
+	 */
+	function documentsTrackingWithNotification(
+		$track,
+		$phone = '',
+		?\DateTimeImmutable $storageEndsAt = null,
+		?string $recipientLabel = null
+	) {
+		$result = $this->withArrayFormat(fn () => $this->documentsTracking($track, $phone));
+		if (empty($result['success']) || empty($result['data'])) {
+			return $this->prepare($result);
+		}
+
+		$timezone = new \DateTimeZone('Europe/Kyiv');
+		$now = new \DateTimeImmutable('now', $timezone);
+		$deadline = $storageEndsAt?->setTimezone($timezone);
+		$daysRemaining = $deadline === null ? null : (int) $now->setTime(0, 0)
+			->diff($deadline->setTime(0, 0))->format('%r%a');
+
+		foreach ($result['data'] as &$shipment) {
+			$shipment['notification'] = null;
+			$status = (string) ($shipment['StatusCode'] ?? '');
+			if (!in_array($status, array('7', '8'), true) || ($deadline !== null && $deadline <= $now)) {
+				continue;
+			}
+
+			$number = '*' . substr((string) ($shipment['Number'] ?? $track), -4);
+			if ($daysRemaining !== null && $daysRemaining <= 3) {
+				$when = match ($daysRemaining) {
+					0 => 'сьогодні',
+					1 => 'завтра',
+					default => 'через ' . $daysRemaining . ' дні',
+				};
+				$shipment['notification'] = array(
+					'type' => 'storage_ending',
+					'title' => 'Добігає кінця зберігання посилки',
+					'message' => 'Зберігання посилки ' . $number . ' завершується ' . $when
+						. ' (' . $deadline->format('d.m.Y H:i') . ').',
+					'trackingNumberMasked' => $number,
+					'storageEndsAt' => $deadline->format(DATE_ATOM),
+					'daysRemaining' => $daysRemaining,
+				);
+				continue;
+			}
+
+			$recipient = trim($recipientLabel ?? '');
+			$recipient = $recipient === '' ? 'Отримувач' : 'Отримувач ' . $recipient;
+			$shipment['notification'] = array(
+				'type' => 'awaiting_pickup',
+				'title' => 'Посилка ще чекає на отримувача',
+				'message' => $recipient . ' досі не забрав посилку ' . $number . '. Нагадайте йому про неї.',
+				'trackingNumberMasked' => $number,
+			);
+		}
+		unset($shipment);
+		return $this->prepare($result);
+	}
+
 	/**
 	 * Get cities of company NovaPoshta
 	 * 
@@ -352,34 +493,41 @@ class NovaPoshtaApi2 {
 	 * @return mixed
 	 */
 	function getWarehouse($cityRef, $description = '') {
-		$warehouses = $this->getWarehouses($cityRef);
-		$data = array();
-		if (is_array($warehouses['data'])) {
-			if (count($warehouses['data']) == 1) {
-				$data = $warehouses['data'][0];
-			} elseif (count($warehouses['data']) > 1 AND $description) {
-				foreach ($warehouses['data'] as $warehouse) {
-					if (mb_stripos($warehouse['Description'], $description) !== FALSE
-					OR mb_stripos($warehouse['DescriptionRu'], $description) !== FALSE) {
-						$data = $warehouse;
-						break;
-					}
+		$result = $this->withArrayFormat(fn () => $this->getWarehouses($cityRef));
+		if (empty($result['success'])) {
+			return $this->prepare($result);
+		}
+
+		$warehouses = $result['data'] ?? array();
+		$description = trim((string) $description);
+		if ($description === '' && count($warehouses) === 1) {
+			return $this->prepare($this->response($warehouses));
+		}
+
+		$matches = array();
+		if ($description !== '') {
+			$search = mb_strtolower($description);
+			$suffix = preg_match('/[0-9]$/D', $description) ? '(?![0-9])' : '';
+			$pattern = '/' . preg_quote($description, '/') . $suffix . '/iu';
+			foreach ($warehouses as $warehouse) {
+				$name = $warehouse['Description'] ?? '';
+				$nameRu = $warehouse['DescriptionRu'] ?? '';
+				if (mb_strtolower($name) === $search || mb_strtolower($nameRu) === $search) {
+					return $this->prepare($this->response(array($warehouse)));
+				}
+				if (preg_match($pattern, $name) || preg_match($pattern, $nameRu)) {
+					$matches[] = $warehouse;
 				}
 			}
 		}
-		// Error
-		( ! $data) AND $error = 'Warehouse was not found';
-		// Return data in same format like NovaPoshta API
-		return $this->prepare(
-			array(
-				'success' => empty($error),
-				'data' => array($data),
-				'errors' => (array) $error,
-				'warnings' => array(),
-				'info' => array(),
-		)); 
+		if (count($matches) === 1) {
+			return $this->prepare($this->response($matches));
+		}
+
+		$error = $matches ? 'Warehouse description is ambiguous' : 'Warehouse was not found';
+		return $this->prepare($this->response(error: $error));
 	}
-	
+
 	/**
 	 * Get streets list by city and/or search string
 	 * 
@@ -431,25 +579,14 @@ class NovaPoshtaApi2 {
 	 * 
 	 * @param string $findByString Find area by russian or ukrainian word
 	 * @param string $ref Get area by ID
-	 * @return array
+	 * @return array|string
 	 */
 	function getArea($findByString = '', $ref = '') {
-		// Load areas list from file
-		empty($this->areas) AND $this->areas = include dirname(__FILE__).'/NovaPoshtaApi2Areas.php';
+		$this->areas ??= require __DIR__ . '/NovaPoshtaApi2Areas.php';
 		$data = $this->findArea($this->areas, $findByString, $ref);
-		// Error
-		empty($data) AND $error = 'Area was not found';
-		// Return data in same format like NovaPoshta API
-		return $this->prepare(
-			array(
-				'success' => empty($error),
-				'data' => $data,
-				'errors' => (array) $error,
-				'warnings' => array(),
-				'info' => array(),
-		));
+		return $this->prepare($this->response($data, $data ? '' : 'Area was not found'));
 	}
-	
+
 	/**
 	 * Get areas list by city and/or search string
 	 *
@@ -475,47 +612,38 @@ class NovaPoshtaApi2 {
 		$data = array();
 		$areaRef = '';
 		// Get region id
-		$area = $this->getArea($areaName);
-		$area['success'] AND $areaRef = $area['data'][0]['Ref'];
-		if ($areaRef AND is_array($cities['data'])) {
-			foreach($cities['data'] as $city) {
-				if ($city['Area'] == $areaRef) {
+		$area = $this->withArrayFormat(fn () => $this->getArea($areaName));
+		$areaRef = $area['data'][0]['Ref'] ?? '';
+		if ($areaRef !== '') {
+			foreach ($cities['data'] as $city) {
+				if (($city['Area'] ?? '') === $areaRef) {
 					$data[] = $city;
 				}
 			}
 		}
 		return $data;
 	}
-	
+
 	/**
-	 * Get city by name and region (if it needs)
-	 * 
-	 * @param string $cityName City's name
-	 * @param string $areaName Region's name
-	 * @return array City's data
+	 * Get a city by name and, when needed, disambiguate by region.
+	 *
+	 * @return array|string
 	 */
 	function getCity($cityName, $areaName = '') {
-		// Get cities by name
-		$cities = $this->getCities(0, $cityName);
-		if (is_array($cities['data'])) {
-			// If cities more then one, calculate current by area name
-			$data = (count($cities['data']) > 1) 
-				? $this->findCityByRegion($cities, $areaName)
-				: $cities['data'][0];
+		$result = $this->withArrayFormat(fn () => $this->getCities(0, $cityName));
+		if (empty($result['success'])) {
+			return $this->prepare($result);
 		}
-		// Error
-		( ! $data) AND $error = 'City was not found';
-		// Return data in same format like NovaPoshta API
-		return $this->prepare(
-			array(
-				'success' => empty($error),
-				'data' => array($data),
-				'errors' => (array) $error,
-				'warnings' => array(),
-				'info' => array(),
-		));
+
+		$data = $result['data'] ?? array();
+		if (count($data) > 1) {
+			$data = $areaName === '' ? array() : $this->findCityByRegion($result, $areaName);
+		}
+
+		$error = $data ? '' : 'City was not found or is ambiguous';
+		return $this->prepare($this->response($data, $error));
 	}
-	
+
 	/**
 	 * Magic method of calling functions (uses for calling Common Model of NovaPoshta API)
 	 * 
@@ -751,49 +879,42 @@ class NovaPoshtaApi2 {
 	 * @return void
 	 */
 	protected function checkInternetDocumentRecipient(array & $counterparty) {
-		// Check required fields
-		if ( ! $counterparty['FirstName'])
-			throw new \Exception('FirstName is required filed for recipient');
-		// MiddleName realy is not required field, but manual says otherwise 
-		// if ( ! $counterparty['MiddleName'])
-			// throw new \Exception('MiddleName is required filed for sender and recipient');
-		if ( ! $counterparty['LastName'])
-			throw new \Exception('LastName is required filed for recipient');
-		if ( ! $counterparty['Phone'])
-			throw new \Exception('Phone is required filed for recipient');
-		if ( ! ($counterparty['City'] OR $counterparty['CityRef']))
-			throw new \Exception('City is required filed for recipient');
-		if ( ! ($counterparty['Region'] OR $counterparty['CityRef']))
-			throw new \Exception('Region is required filed for recipient');
-	
-		// Set defaults
-		if ( ! $counterparty['CounterpartyType']) {
+		foreach (array('FirstName', 'LastName', 'Phone') as $field) {
+			if (empty($counterparty[$field])) {
+				throw new \InvalidArgumentException($field . ' is required for recipient');
+			}
+		}
+		if (empty($counterparty['CityRecipient']) && empty($counterparty['CityRef'])
+			&& (empty($counterparty['City']) || empty($counterparty['Region']))) {
+			throw new \InvalidArgumentException('City and region or city reference are required for recipient');
+		}
+		if (empty($counterparty['CounterpartyType'])) {
 			$counterparty['CounterpartyType'] = 'PrivatePerson';
 		}
 	}
-	
-	/**
-	 * Check required params for new InternetDocument and set defaults
-	 * 
-	 * @param array & $params 
-	 * @return void
-	 */
+
 	protected function checkInternetDocumentParams(array & $params) {
-		if ( ! $params['Description'])
-			throw new \Exception('Description is required filed for new Internet document');
-		if ( ! $params['Weight'])
-			throw new \Exception('Weight is required filed for new Internet document');
-		if ( ! $params['Cost'])
-			throw new \Exception('Cost is required filed for new Internet document');
-		( ! $params['DateTime']) AND $params['DateTime'] = date('d.m.Y');
-		( ! $params['ServiceType']) AND $params['ServiceType'] = 'WarehouseWarehouse';
-		( ! $params['PaymentMethod']) AND $params['PaymentMethod'] = 'Cash';
-		( ! $params['PayerType']) AND $params['PayerType'] = 'Recipient';
-		( ! $params['SeatsAmount']) AND $params['SeatsAmount'] = '1';
-		( ! $params['CargoType']) AND $params['CargoType'] = 'Cargo';
-		( ! $params['VolumeGeneral']) AND $params['VolumeGeneral'] = '0.0004';
+		foreach (array('Description', 'Weight', 'Cost') as $field) {
+			if (empty($params[$field])) {
+				throw new \InvalidArgumentException($field . ' is required for new Internet document');
+			}
+		}
+		$defaults = array(
+			'DateTime' => date('d.m.Y'),
+			'ServiceType' => 'WarehouseWarehouse',
+			'PaymentMethod' => 'Cash',
+			'PayerType' => 'Recipient',
+			'SeatsAmount' => '1',
+			'CargoType' => 'Cargo',
+			'VolumeGeneral' => '0.0004',
+		);
+		foreach ($defaults as $field => $default) {
+			if (empty($params[$field])) {
+				$params[$field] = $default;
+			}
+		}
 	}
-	
+
 	/**
 	 * Create Internet Document by 
 	 * 
@@ -817,57 +938,103 @@ class NovaPoshtaApi2 {
 	 * @param mixed
 	 */
 	function newInternetDocument($sender, $recipient, $params) {
-		// Check for required params and set defaults
+		$result = $this->withArrayFormat(fn () => $this->resolveInternetDocument($sender, $recipient, $params));
+		if (!$result['success']) {
+			return $this->prepare($result);
+		}
+		return $this->model('InternetDocument')->save($result['data']);
+	}
+
+	private function resolveInternetDocument(array $sender, array $recipient, array $params): array {
 		$this->checkInternetDocumentRecipient($recipient);
 		$this->checkInternetDocumentParams($params);
-		if ( ! $sender['CitySender']) {
-			$senderCity = $this->getCity($sender['City'], $sender['Region']);
-			$sender['CitySender'] = $senderCity['data'][0]['Ref'];
+
+		$sender['CitySender'] = ($sender['CitySender'] ?? '') ?: ($sender['CityRef'] ?? '');
+		if (!$sender['CitySender']) {
+			if (empty($sender['City'])) {
+				return $this->response(error: 'Sender city is required');
+			}
+			$result = $this->getCity($sender['City'], $sender['Region'] ?? '');
+			if (!$result['success']) {
+				return $result;
+			}
+			if (count($result['data']) !== 1 || empty($result['data'][0]['Ref'])) {
+				return $this->response(error: 'Sender city could not be identified unambiguously');
+			}
+			$sender['CitySender'] = $result['data'][0]['Ref'];
 		}
 		$sender['CityRef'] = $sender['CitySender'];
-		if ( ! $sender['SenderAddress'] AND $sender['CitySender'] AND $sender['Warehouse']) {
-			$senderWarehouse = $this->getWarehouse($sender['CitySender'], $sender['Warehouse']);
-			$sender['SenderAddress'] = $senderWarehouse['data'][0]['Ref'];
+		if (empty($sender['SenderAddress']) && !empty($sender['Warehouse'])) {
+			$result = $this->getWarehouse($sender['CitySender'], $sender['Warehouse']);
+			if (!$result['success']) {
+				return $result;
+			}
+			$sender['SenderAddress'] = $result['data'][0]['Ref'] ?? '';
+			if (!$sender['SenderAddress']) {
+				return $this->response(error: 'Sender warehouse reference was not returned');
+			}
 		}
-		if ( ! $sender['Sender']) {
+		if (empty($sender['Sender'])) {
 			$sender['CounterpartyProperty'] = 'Sender';
-			// Set full name to Description if is not set
-			if ( ! $sender['Description']) {
-			    $sender['Description'] = $sender['LastName'].' '.$sender['FirstName'].' '.$sender['MiddleName'];
+			$sender['Description'] = ($sender['Description'] ?? '') ?: trim(
+				($sender['LastName'] ?? '') . ' ' . ($sender['FirstName'] ?? '') . ' ' . ($sender['MiddleName'] ?? '')
+			);
+			$result = $this->getCounterparties('Sender', 1, $sender['Description'], $sender['CityRef']);
+			if (!$result['success']) {
+				return $result;
 			}
-			// Check for existing sender
-			$senderCounterpartyExisting = $this->getCounterparties('Sender', 1, $sender['Description'], $sender['CityRef']);
-			// Copy user to the selected city if user doesn't exists there
-			if ($senderCounterpartyExisting['data'][0]['Ref']) {
-    			// Counterparty exists
-    			$sender['Sender'] = $senderCounterpartyExisting['data'][0]['Ref'];
-    			$contactSender = $this->getCounterpartyContactPersons($sender['Sender']);
-    			$sender['ContactSender'] = $contactSender['data'][0]['Ref'];
-    			$sender['SendersPhone'] = $sender['Phone'] ? $sender['Phone'] : $contactSender['data'][0]['Phones'];
+			$sender['Sender'] = $result['data'][0]['Ref'] ?? '';
+			if (!$sender['Sender']) {
+				return $this->response(error: 'Sender was not found');
+			}
+			$result = $this->getCounterpartyContactPersons($sender['Sender']);
+			if (!$result['success']) {
+				return $result;
+			}
+			$sender['ContactSender'] = $result['data'][0]['Ref'] ?? '';
+			$sender['SendersPhone'] = ($sender['Phone'] ?? '') ?: ($result['data'][0]['Phones'] ?? '');
+			if (!$sender['ContactSender']) {
+				return $this->response(error: 'Sender contact was not found');
 			}
 		}
-		
-		// Prepare recipient data
+
 		$recipient['CounterpartyProperty'] = 'Recipient';
 		$recipient['RecipientsPhone'] = $recipient['Phone'];
-		if ( ! $recipient['CityRecipient']) {
-			$recipientCity = $this->getCity($recipient['City'], $recipient['Region']);
-			$recipient['CityRecipient'] = $recipientCity['data'][0]['Ref'];
+		$recipient['CityRecipient'] = ($recipient['CityRecipient'] ?? '') ?: ($recipient['CityRef'] ?? '');
+		if (!$recipient['CityRecipient']) {
+			$result = $this->getCity($recipient['City'], $recipient['Region']);
+			if (!$result['success']) {
+				return $result;
+			}
+			if (count($result['data']) !== 1 || empty($result['data'][0]['Ref'])) {
+				return $this->response(error: 'Recipient city could not be identified unambiguously');
+			}
+			$recipient['CityRecipient'] = $result['data'][0]['Ref'];
 		}
 		$recipient['CityRef'] = $recipient['CityRecipient'];
-		if ( ! $recipient['RecipientAddress']) {
-			$recipientWarehouse = $this->getWarehouse($recipient['CityRecipient'], $recipient['Warehouse']);
-			$recipient['RecipientAddress'] = $recipientWarehouse['data'][0]['Ref'];
+		if (empty($recipient['RecipientAddress'])) {
+			$result = $this->getWarehouse($recipient['CityRecipient'], $recipient['Warehouse'] ?? '');
+			if (!$result['success']) {
+				return $result;
+			}
+			$recipient['RecipientAddress'] = $result['data'][0]['Ref'] ?? '';
+			if (!$recipient['RecipientAddress']) {
+				return $this->response(error: 'Recipient warehouse reference was not returned');
+			}
 		}
-		if ( ! $recipient['Recipient']) {
-			$recipientCounterparty = $this->model('Counterparty')->save($recipient);
-			$recipient['Recipient'] = $recipientCounterparty['data'][0]['Ref'];
-			$recipient['ContactRecipient'] = $recipientCounterparty['data'][0]['ContactPerson']['data'][0]['Ref'];
+		if (empty($recipient['Recipient'])) {
+			$result = $this->model('Counterparty')->save($recipient);
+			if (!$result['success']) {
+				return $result;
+			}
+			$recipient['Recipient'] = $result['data'][0]['Ref'] ?? '';
+			$recipient['ContactRecipient'] = $result['data'][0]['ContactPerson']['data'][0]['Ref'] ?? '';
+			if (!$recipient['Recipient'] || !$recipient['ContactRecipient']) {
+				return $this->response(error: 'Recipient or recipient contact was not returned');
+			}
 		}
-		// Full params is merge of arrays $sender, $recipient, $params
-		$paramsInternetDocument = array_merge($sender, $recipient, $params);
-		// Creating new Internet Document
-		return $this->model('InternetDocument')->save($paramsInternetDocument);
+
+		return $this->response(array_merge($sender, $recipient, $params));
 	}
 
 	/**
