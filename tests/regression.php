@@ -85,6 +85,18 @@ expect(true, str_contains($result['data'][0]['notification']['message'], 'чер
 expect($deadline->format(DATE_ATOM), $result['data'][0]['notification']['storageEndsAt']);
 expect('json', $np->getFormat());
 
+$automaticDeadline = new DateTimeImmutable('+2 days', $kyiv);
+$automatic = new TestClient('test-key', 'ua');
+$automatic->replies = [success([[
+    'Number' => $number,
+    'StatusCode' => '7',
+    'DateReturnCargo' => $automaticDeadline->format('Y-m-d H:i:s'),
+]])];
+$automaticNotice = $automatic->documentsTrackingWithNotification($number)['data'][0]['notification'];
+expect('storage_ending', $automaticNotice['type']);
+expect(2, $automaticNotice['daysRemaining']);
+expect($automaticDeadline->format(DATE_ATOM), $automaticNotice['storageEndsAt']);
+
 $np->setFormat('xml');
 $result = new SimpleXMLElement($np->documentsTrackingWithNotification($number));
 expect('awaiting_pickup', (string) $result->data->item->notification->type);

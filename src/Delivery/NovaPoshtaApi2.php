@@ -400,13 +400,21 @@ class NovaPoshtaApi2 {
 		$timezone = new \DateTimeZone('Europe/Kyiv');
 		$now = new \DateTimeImmutable('now', $timezone);
 		$deadline = $storageEndsAt?->setTimezone($timezone);
-		$daysRemaining = $deadline === null ? null : (int) $now->setTime(0, 0)
-			->diff($deadline->setTime(0, 0))->format('%r%a');
 
 		foreach ($result['data'] as &$shipment) {
 			$shipment['notification'] = null;
 			$status = (string) ($shipment['StatusCode'] ?? '');
-			if (!in_array($status, array('7', '8'), true) || ($deadline !== null && $deadline <= $now)) {
+			$shipmentDeadline = $deadline;
+			if ($shipmentDeadline === null && !empty($shipment['DateReturnCargo'])) {
+				try {
+					$shipmentDeadline = new \DateTimeImmutable((string) $shipment['DateReturnCargo'], $timezone);
+				} catch (\Exception) {
+					$shipmentDeadline = null;
+				}
+			}
+			$daysRemaining = $shipmentDeadline === null ? null : (int) $now->setTime(0, 0)
+				->diff($shipmentDeadline->setTime(0, 0))->format('%r%a');
+			if (!in_array($status, array('7', '8'), true) || ($shipmentDeadline !== null && $shipmentDeadline <= $now)) {
 				continue;
 			}
 
@@ -421,9 +429,9 @@ class NovaPoshtaApi2 {
 					'type' => 'storage_ending',
 					'title' => 'Добігає кінця зберігання посилки',
 					'message' => 'Зберігання посилки ' . $number . ' завершується ' . $when
-						. ' (' . $deadline->format('d.m.Y H:i') . ').',
+						. ' (' . $shipmentDeadline->format('d.m.Y H:i') . ').',
 					'trackingNumberMasked' => $number,
-					'storageEndsAt' => $deadline->format(DATE_ATOM),
+					'storageEndsAt' => $shipmentDeadline->format(DATE_ATOM),
 					'daysRemaining' => $daysRemaining,
 				);
 				continue;
