@@ -381,6 +381,27 @@ class NovaPoshtaApi2 {
 	}
 
 	/**
+	 * Get tracking information for multiple shipments in one request.
+	 */
+	function getStatusDocuments(array $shipments) {
+		$documents = array();
+		foreach ($shipments as $shipment) {
+			$documentNumber = (string) ($shipment['ttn'] ?? $shipment['DocumentNumber'] ?? '');
+			if ($documentNumber === '') {
+				continue;
+			}
+			$document = array('DocumentNumber' => $documentNumber);
+			$phone = (string) ($shipment['phone'] ?? $shipment['Phone'] ?? '');
+			if ($phone !== '') {
+				$document['Phone'] = $phone;
+			}
+			$documents[] = $document;
+		}
+
+		return $this->request('TrackingDocument', 'getStatusDocuments', array('Documents' => $documents));
+	}
+
+	/**
 	 * Track one shipment and add a Ukrainian pickup notice to each returned tracking record.
 	 *
 	 * Pass a confirmed storage cutoff for this shipment to enable the expiration notice.
@@ -400,13 +421,21 @@ class NovaPoshtaApi2 {
 		$timezone = new \DateTimeZone('Europe/Kyiv');
 		$now = new \DateTimeImmutable('now', $timezone);
 		$deadline = $storageEndsAt?->setTimezone($timezone);
-		$daysRemaining = $deadline === null ? null : (int) $now->setTime(0, 0)
-			->diff($deadline->setTime(0, 0))->format('%r%a');
 
 		foreach ($result['data'] as &$shipment) {
 			$shipment['notification'] = null;
 			$status = (string) ($shipment['StatusCode'] ?? '');
-			if (!in_array($status, array('7', '8'), true) || ($deadline !== null && $deadline <= $now)) {
+			$shipmentDeadline = $deadline;
+			if ($shipmentDeadline === null && !empty($shipment['DateReturnCargo'])) {
+				try {
+					$shipmentDeadline = new \DateTimeImmutable((string) $shipment['DateReturnCargo'], $timezone);
+				} catch (\Exception) {
+					$shipmentDeadline = null;
+				}
+			}
+			$daysRemaining = $shipmentDeadline === null ? null : (int) $now->setTime(0, 0)
+				->diff($shipmentDeadline->setTime(0, 0))->format('%r%a');
+			if (!in_array($status, array('7', '8'), true) || ($shipmentDeadline !== null && $shipmentDeadline <= $now)) {
 				continue;
 			}
 
@@ -421,9 +450,9 @@ class NovaPoshtaApi2 {
 					'type' => 'storage_ending',
 					'title' => 'Добігає кінця зберігання посилки',
 					'message' => 'Зберігання посилки ' . $number . ' завершується ' . $when
-						. ' (' . $deadline->format('d.m.Y H:i') . ').',
+						. ' (' . $shipmentDeadline->format('d.m.Y H:i') . ').',
 					'trackingNumberMasked' => $number,
-					'storageEndsAt' => $deadline->format(DATE_ATOM),
+					'storageEndsAt' => $shipmentDeadline->format(DATE_ATOM),
 					'daysRemaining' => $daysRemaining,
 				);
 				continue;
