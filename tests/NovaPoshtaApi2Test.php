@@ -11,7 +11,7 @@ class NovaPoshtaApi2Test extends \PHPUnit_Framework_TestCase
 	/**
 	 * Key for connection
 	 * 
-	 * @see https://my.novaposhta.ua/settings/index#apikeys
+	 * @see https://new.novaposhta.ua/dashboard/settings/developers
 	 */
 	private $key = '';
 	/**

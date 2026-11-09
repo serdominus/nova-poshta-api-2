@@ -13,7 +13,7 @@ class NovaPoshtaApi2 {
 	 * Key for API NovaPoshta
 	 * 
 	 * @var string $key
-	 * @see https://my.novaposhta.ua/settings/index#apikeys
+	 * @see https://new.novaposhta.ua/dashboard/settings/developers
 	 */
 	protected $key;
 	
